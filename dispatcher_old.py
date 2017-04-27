@@ -1,6 +1,6 @@
 from __future__ import print_function
-import sys, threading
-from time import sleep
+import sys
+import threading
 try:
     import queue
 except ImportError:
@@ -14,51 +14,41 @@ class DispatcherQueue(object):
     def __init__(self):
         self.workqueue = queue.Queue()
         self.resultqueue = queue.Queue()
-        self.worker_heartbeat = {}
         self.items_collected = {}
-
-        self.pinger = threading.Thread(target = self.ping)
-        self.pinger.daemon = True
-        self.pinger.start()
-
-    @Pyro4.expose
-    def ping(self, timeout=2, sleep_time=1):
-        while(True):
-            for worker, beat in self.worker_heartbeat.items():
-                flag = beat.wait(timeout)
-                #print(flag)
-                if (not flag and self.items_collected[worker]):
-                    print(worker + " not responding --> resubmit task")
-                    self.putWork(self.items_collected[worker])
-                    self.items_collected[worker] = None
-                beat.clear()
-            sleep(sleep_time)
-
-    @Pyro4.expose
-    def initWorker(self, worker_name):
-        self.worker_heartbeat[worker_name] = threading.Event()
-        self.worker_heartbeat[worker_name].set()
-        self.items_collected[worker_name] = None
-
-    @Pyro4.expose
-    def setHeartbeat(self, worker_name):
-        #print("Hearbeat called")
-        self.worker_heartbeat[worker_name].set()
+        #self.items_backup = {}
+        #self.client_retry = {}
+        #self.worker_registry = {}
+        #self.lock = threading.Lock()
 
     @Pyro4.expose
     def putWork(self, item):
-        self.workqueue.put(item)
+        #self.lock.acquire()
+        #self.items_backup[item.assignedBy + "," + str(item.itemId)] = item
+        #self.lock.release()
+        for i in range(3):
+            self.workqueue.put(item)
 
     @Pyro4.expose
     def getWork(self, worker_name, timeout=5):
         item = self.workqueue.get(timeout=timeout)
-        self.items_collected[worker_name] = item
-        return item
+        if worker_name not in self.items_collected.keys():
+            self.items_collected[worker_name] = [item.assignedBy + "," + str(item.itemId)]
+            return item
+        elif item.assignedBy + "," + str(item.itemId) not in self.items_collected[worker_name]:
+            self.items_collected[worker_name].append(item.assignedBy + "," + str(item.itemId))
+            return item
+        else:
+            self.workqueue.put(item)
+            raise queue.Empty
 
     @Pyro4.expose
     def putResult(self, item):
+        # print(self.items_backup.keys())
         self.resultqueue.put(item)
-        self.items_collected[item.processedBy] = None
+
+        #self.lock.acquire()
+        #del self.items_backup[item.assignedBy + "," + str(item.itemId)]
+        #self.lock.release()
 
     @Pyro4.expose
     def getResult(self, client_name, timeout=5):

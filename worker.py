@@ -1,5 +1,6 @@
 from __future__ import print_function
-import os,socket,sys
+import os,socket,sys, threading
+from time import sleep
 from math import floor, sqrt
 try:
     import queue
@@ -30,10 +31,22 @@ def process(item):
     print(item.result)
     item.processedBy = WORKERNAME
 
+def beat_setter(dispatcher, worker_name, sleep_time):
+    while(True):
+        dispatcher.setHeartbeat(worker_name)
+        sleep(sleep_time)
+
 def main():
     disp_address = str(sys.argv[1])
     dispatcher = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
     print("This is worker %s" % WORKERNAME)
+    dispatcher.initWorker(WORKERNAME)
+
+    SLEEPTIME = 1
+    heartbit_setter = threading.Thread(target = beat_setter, args=([dispatcher, WORKERNAME, SLEEPTIME]))
+    heartbit_setter.daemon = True
+    heartbit_setter.start()
+
     while True:
         try:
             item = dispatcher.getWork(WORKERNAME)
