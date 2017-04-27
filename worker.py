@@ -1,6 +1,8 @@
 from __future__ import print_function
 import os,socket,sys, threading
 from time import sleep
+from multiprocessing import Process
+from multiprocessing import Queue as multip_queue
 from math import floor, sqrt
 try:
     import queue
@@ -24,10 +26,20 @@ def factorize(n):
         d += 1
     return q <= maxq and [q] + factorize(n//q) or [n]
 
+
+def factorize_mimic(n, q):
+    q.put(factorize(n))
+
 def process(item):
     print("factorizing %s -->" % item.data)
     sys.stdout.flush()
-    item.result = factorize(int(item.data))
+
+    q = multip_queue()
+    p = Process(target=factorize_mimic, args=(int(item.data), q))
+    p.start()
+    item.result = q.get()
+    p.join()
+
     print(item.result)
     item.processedBy = WORKERNAME
 
