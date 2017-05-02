@@ -16,12 +16,14 @@ class DispatcherQueue(object):
         self.resultqueue = queue.Queue()
         self.worker_heartbeat = {}
         self.items_collected = {}
+        self.new_worker_flag = False
+        self.register_worker_allowed = False
+        self.cv = threading.Condition()
 
         self.pinger = threading.Thread(target = self.ping)
         self.pinger.daemon = True
         self.pinger.start()
 
-    @Pyro4.expose
     def ping(self, timeout=2, sleep_time=1):
         while(True):
             for worker, beat in self.worker_heartbeat.items():
@@ -34,9 +36,26 @@ class DispatcherQueue(object):
                 beat.clear()
             sleep(sleep_time)
 
+            self.cv.acquire()
+            self.register_worker_allowed = True
+            self.cv.notify()
+            while self.new_worker_flag:
+                self.cv.wait()
+            self.register_worker_allowed = False
+            self.cv.release()
+
+
     @Pyro4.expose
     def initWorker(self, worker_name):
+        self.cv.acquire()
+        self.new_worker_flag = True
+        while not self.register_worker_allowed:
+            self.cv.wait()
         self.worker_heartbeat[worker_name] = threading.Event()
+        self.new_worker_flag = False
+        self.cv.notify()
+        self.cv.release()
+
         self.worker_heartbeat[worker_name].set()
         self.items_collected[worker_name] = None
 
