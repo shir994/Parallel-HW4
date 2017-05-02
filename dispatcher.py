@@ -13,7 +13,7 @@ Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 class DispatcherQueue(object):
     def __init__(self):
         self.workqueue = queue.Queue()
-        self.resultqueue = queue.Queue()
+        self.resultsdict = {}
         self.worker_heartbeat = {}
         self.items_collected = {}
         self.new_worker_flag = False
@@ -60,8 +60,11 @@ class DispatcherQueue(object):
         self.items_collected[worker_name] = None
 
     @Pyro4.expose
+    def initClient(self, client_name):
+        self.resultsdict[client_name] = queue.Queue()
+
+    @Pyro4.expose
     def setHeartbeat(self, worker_name):
-        #print("Hearbeat called")
         self.worker_heartbeat[worker_name].set()
 
     @Pyro4.expose
@@ -76,17 +79,12 @@ class DispatcherQueue(object):
 
     @Pyro4.expose
     def putResult(self, item):
-        self.resultqueue.put(item)
+        self.resultsdict[item.assignedBy].put(item)
         self.items_collected[item.processedBy] = None
 
     @Pyro4.expose
     def getResult(self, client_name, timeout=5):
-        item = self.resultqueue.get(timeout=timeout)
-        if (client_name != item.assignedBy):
-            self.resultqueue.put(item)
-            raise queue.Empty
-
-        return item
+        return self.resultsdict[client_name].get(timeout=timeout)
 
     @Pyro4.expose
     def workQueueSize(self):

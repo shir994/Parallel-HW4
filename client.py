@@ -54,6 +54,7 @@ def main():
     numbers = readNumbers(numbers_path)
 
     with Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address) as dispatcher:
+        dispatcher.initClient(CLIENTNAME)
         placeWork(dispatcher, numbers)
         results = collectResults(dispatcher, len(numbers))
 
