@@ -16,7 +16,7 @@ Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 
 Pyro4.config.COMMTIMEOUT = 5
 
-WORKERNAME = "Worker_%d@%s" % (os.getpid(), socket.gethostname())
+
 
 class WrongDispatcher(Exception):
     pass
@@ -31,86 +31,85 @@ def factorize(n):
         d += 1
     return q <= maxq and [q] + factorize(n//q) or [n]
 
+class Worker(object):
 
-def factorize_mimic(n, q):
-    q.put(factorize(n))
+    def __init__(self, dispatcher_one, dispatcher_two):
+        self.dispatcher_one = dispatcher_one
+        self.dispatcher_two = dispatcher_two
+        self.current_dispatcher = self.dispatcher_one
+        self.item = None
+        self.WORKERNAME = "Worker_%d@%s" % (os.getpid(), socket.gethostname())
+        print("This is worker %s" % self.WORKERNAME)
 
-def process(item):
-    print("factorizing %s -->" % item.data)
-    sys.stdout.flush()
+    def factorize_mimic(self, n, q):
+        q.put(factorize(n))
 
-    q = multip_queue()
-    p = Process(target=factorize_mimic, args=(int(item.data), q))
-    p.start()
-    item.result = q.get()
-    p.join()
+    def process(self, item):
+        print("factorizing %s -->" % item.data)
+        sys.stdout.flush()
 
-    print(item.result)
-    item.processedBy = WORKERNAME
+        q = multip_queue()
+        p = Process(target=self.factorize_mimic, args=(int(item.data), q))
+        p.start()
+        item.result = q.get()
+        p.join()
 
-def beat_setter(dispatcher, worker_name, sleep_time):
-    while(True):
-        dispatcher.setHeartbeat(worker_name)
-        sleep(sleep_time)
+        print(item.result)
+        item.processedBy = self.WORKERNAME
+        self.item = item
 
-def main():
-    SLEEPTIME = 3
-    print("This is worker %s" % WORKERNAME)
-    disp_address = str(sys.argv[1])
-    dispatcher_one = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
-    try:
-        dispatcher_one.initWorker(WORKERNAME)
-    except (Pyro4.errors.ConnectionClosedError, Pyro4.errors.CommunicationError, WrongDispatcher):
-        pass
-
-    disp_address = str(sys.argv[2])
-    dispatcher_two = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
-    try:
-        dispatcher_two.initWorker(WORKERNAME)
-    except (Pyro4.errors.ConnectionClosedError, Pyro4.errors.CommunicationError, WrongDispatcher):
-        pass
-
-    # SLEEPTIME = 1
-    # heartbit_setter = threading.Thread(target = beat_setter, args=([dispatcher, WORKERNAME, SLEEPTIME]))
-    # heartbit_setter.daemon = True
-    # heartbit_setter.start()
-
-    current_dispatcher = dispatcher_one
-    while True:
+    def ProcessWork(self, sleep_time=3):
         while True:
             try:
                 print("1")
                 try:
-                    item = current_dispatcher.getWork(WORKERNAME)
+                    item = self.current_dispatcher.getWork(self.WORKERNAME)
                 except queue.Empty:
                     print("no work available yet")
                 else:
-                    process(item)
+                    self.process(item)
                     break
-            except (Pyro4.errors.ConnectionClosedError, Pyro4.errors.CommunicationError, WrongDispatcher):
-                sleep(SLEEPTIME)
+            except (Pyro4.errors.ConnectionClosedError,
+                    Pyro4.errors.CommunicationError, WrongDispatcher):
+                sleep(sleep_time)
                 print("changing dispatcher")
-                if current_dispatcher == dispatcher_one:
-                    current_dispatcher = dispatcher_two
+                if self.current_dispatcher == self.dispatcher_one:
+                    self.current_dispatcher = self.dispatcher_two
                 else:
-                    current_dispatcher = dispatcher_one
-        while(True):
+                    self.current_dispatcher = self.dispatcher_one
+
+    def PutResult(self, sleep_time=3):
+        while True:
             try:
                 print("2")
-                current_dispatcher.putResult(item)
-            except (Pyro4.errors.ConnectionClosedError, Pyro4.errors.CommunicationError, WrongDispatcher):
-                sleep(SLEEPTIME)
+                self.current_dispatcher.putResult(self.item)
+            except (Pyro4.errors.ConnectionClosedError,
+                    Pyro4.errors.CommunicationError, WrongDispatcher):
+                sleep(sleep_time)
                 print("changing dispatcher")
-                if current_dispatcher == dispatcher_one:
-                    current_dispatcher = dispatcher_two
+                if self.current_dispatcher == self.dispatcher_one:
+                    self.current_dispatcher = self.dispatcher_two
                     print("4")
                 else:
-                    current_dispatcher = dispatcher_one
+                    self.current_dispatcher = self.dispatcher_one
                     print("5")
             else:
-                break            
-                                    
+                break
+
+    def StartLoop(self):
+        while True:
+            self.ProcessWork()
+            self.PutResult()
 
 
+def main():
+    disp_address = str(sys.argv[1])
+    dispatcher_one = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
+    disp_address = str(sys.argv[2])
+    dispatcher_two = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
+
+    worker = Worker(dispatcher_one, dispatcher_two)
+    worker.StartLoop()
+      
 if __name__=="__main__":
     main()

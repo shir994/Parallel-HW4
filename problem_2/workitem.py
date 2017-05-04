@@ -9,11 +9,3 @@ class Workitem(object):
 
     def __str__(self):
         return "<Workitem id=%s>" % str(self.itemId)
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__) and\
-                self.itemId == other.itemId and\
-                self.assignedBy == other.assignedBy:
-            return True
-        else:
-            return False
