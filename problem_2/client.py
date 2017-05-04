@@ -12,7 +12,7 @@ from time import sleep
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 
-
+Pyro4.config.COMMTIMEOUT = 5
 
 class WrongDispatcher(Exception):
     pass
@@ -56,7 +56,7 @@ def writeResults(results, path):
             f.write(str(number) + ': ' + ', '.join(map(str,factorials)) + '\n')
 
 def main():
-    SLEEPTIME = 1
+    SLEEPTIME = 3
     client = Client()
     disp_address = str(sys.argv[1])
     dispatcher_one = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)

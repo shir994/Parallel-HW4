@@ -27,6 +27,7 @@ class DispatcherQueue(object):
         # dispatcher - dispatcher parameters
         self._current_role = initial_role
         self.second_dispatcher = Pyro4.core.Proxy("PYRO:dispatcher@" + second_adress)
+        self.second_dispatcher._pyroTimeout = 1
         self._master_iteration = False
 
         self.Dpinger = threading.Thread(target = self.pingDispatcher)
@@ -141,7 +142,7 @@ class DispatcherQueue(object):
         self.workqueue.put(item)
 
     @Pyro4.expose
-    def getWork(self, worker_name, timeout=5):
+    def getWork(self, worker_name, timeout=3):
         self.CheckDispatcher()
 
         item = self.workqueue.get(timeout=timeout)
@@ -156,16 +157,17 @@ class DispatcherQueue(object):
     @Pyro4.expose
     def putResult(self, item):
         self.CheckDispatcher()
+        print("put 1")
         try:
             self.second_dispatcher.copyResult(item)
         except:
             pass
-
+        print("put 2")
         self.resultsdict[item.assignedBy].put(item)
         self.done_items[item.assignedBy][item.data] = item
 
     @Pyro4.expose
-    def getResult(self, client_name, timeout=5):
+    def getResult(self, client_name, timeout=3):
         self.CheckDispatcher()
         return self.resultsdict[client_name].get(timeout=timeout)
 

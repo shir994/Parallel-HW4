@@ -14,6 +14,8 @@ from workitem import Workitem
 Pyro4.config.SERIALIZER = 'pickle'
 Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
 
+Pyro4.config.COMMTIMEOUT = 5
+
 WORKERNAME = "Worker_%d@%s" % (os.getpid(), socket.gethostname())
 
 class WrongDispatcher(Exception):
@@ -52,7 +54,7 @@ def beat_setter(dispatcher, worker_name, sleep_time):
         sleep(sleep_time)
 
 def main():
-    SLEEPTIME = 1
+    SLEEPTIME = 3
     print("This is worker %s" % WORKERNAME)
     disp_address = str(sys.argv[1])
     dispatcher_one = Pyro4.core.Proxy("PYRO:dispatcher@" + disp_address)
